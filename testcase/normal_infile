@@ -1,0 +1,122 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   main.c                                             :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: yjimpei <yjimpei@student.42tokyo.jp>       +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2021/12/20 10:22:40 by yjimpei           #+#    #+#             */
+/*   Updated: 2021/12/30 17:17:25 by yjimpei          ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "pipex.h"
+
+void	first_cmd(t_arginfo *info, char **envp)
+{
+	int	in_fd;
+	int	pipe_fd[2];
+	int	pid;
+	int	i;
+	int	status;
+
+	in_fd = open(info->in_flnm, O_RDWR);
+	if (in_fd == -1)
+		error_exit("open", info);
+	if (pipe(pipe_fd) == -1)
+		error_exit("pipe", info);
+	if (dup2(in_fd, STDIN_FILENO) == -1)
+		error_exit("dup2", info);
+	pid = fork();
+	if (pid == -1)
+		error_exit("fork", info);
+	if (pid == 0)
+	{
+		close(pipe_fd[READ]);
+		if (dup2(pipe_fd[WRITE], STDOUT_FILENO) == -1)
+			error_exit("dup2", info);
+		i = 0;
+		while (info->cmd1_lst[i] != NULL)
+		{
+			execve(info->cmd1_lst[i], info->exargv1, envp);
+			i++;
+		}
+		ft_putendl_fd("excve: command not found", STDERR_FILENO);
+		close(pipe_fd[WRITE]);
+		exit(EXIT_FAILURE);
+	}
+	else
+	{
+		close(pipe_fd[WRITE]);
+		wait(&status);
+		if (status != 0)
+		{
+			all_free(info);
+			exit(EXIT_FAILURE);
+		}
+		if (dup2(pipe_fd[READ], STDIN_FILENO) == -1)
+			error_exit("dup2", info);
+		close(in_fd);
+		close(pipe_fd[READ]);
+	}
+}
+
+void	second_cmd(t_arginfo *info, char **envp)
+{
+	int		pipe_fd2[2];
+	int		pid;
+	int		i;
+	int		status;
+
+	if (info->out_fd == -1)
+		error_exit("open", info);
+	if (pipe(pipe_fd2) == -1)
+		error_exit("pipe", info);
+	if (dup2(pipe_fd2[WRITE], STDOUT_FILENO) == -1)
+		error_exit("pipe", info);
+	pid = fork();
+	if (pid == -1)
+		error_exit("fork", info);
+	if (pid == 0)
+	{
+		close(pipe_fd2[READ]);
+		if (dup2(info->out_fd, STDOUT_FILENO) == -1)
+			error_exit("dup2", info);
+		i = 0;
+		while (info->cmd2_lst[i] != NULL)
+		{
+			execve(info->cmd2_lst[i], info->exargv2, envp);
+			i++;
+		}
+		close(pipe_fd2[WRITE]);
+		ft_putendl_fd("excve: command not found", STDERR_FILENO);
+		exit(EXIT_FAILURE);
+	}
+	else
+	{
+		wait(&status);
+		if (status != 0)
+		{
+			all_free(info);
+			exit(EXIT_FAILURE);
+		}
+		close(pipe_fd2[WRITE]);
+		close(info->out_fd);
+		close(pipe_fd2[READ]);
+	}
+}
+
+int	main(int argc, char **argv, char **envp)
+{
+	t_arginfo	*info;
+
+	if (argc != 5)
+		exit(EXIT_FAILURE);
+	info = malloc(sizeof(t_arginfo));
+	init_arg_info(argv, info, envp);
+	out_file_check_info(info);
+	first_cmd(info, envp);
+	second_cmd(info, envp);
+	all_free(info);
+	exit(EXIT_SUCCESS);
+}
